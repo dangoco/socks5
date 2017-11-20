@@ -1,24 +1,24 @@
 {
-    "name": "socks5"
-  , "version": "1.0.1"
-  , "description": "A simple SOCKS 5/4/4a implementation and demo proxy"
-  , "author": [
-    "Gert Van Gool <gertvangool@gmail.com>",
-    "Tom Zhou <iwebpp@gmail.com>"
-  ]
-  , "repository": {
-    "type": "git",
-    "url": "git://github.com/sequoiar/socks5.git"
-  }
-  , "keywords": [
-    "socks",
-    "socks5",
-    "socks4",
-    "socks4a",
-    "proxy",
-    "http"
-  ]
-  , "main": "socks.js"
-  , "dependencies": {
-  }
+	"name": "socks5server",
+	"version": "2.0.1",
+	"description": "A simple SOCKS 5/4/4a implementation and demo proxy",
+	"author": [
+		"Gert Van Gool <gertvangool@gmail.com>",
+		"Tom Zhou <iwebpp@gmail.com>",
+		"Tgohanwotabe <gohanwotabe@gmail.com>"
+	],
+	"repository": {
+		"type": "git",
+		"url": "git@github.com:dangoco/socks5-server.git"
+	},
+	"keywords": [
+		"socks",
+		"socks5",
+		"socks4",
+		"socks4a",
+		"proxy",
+		"http"
+	],
+	"main": "socks.js",
+	"dependencies": {}
 }

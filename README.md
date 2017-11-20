@@ -12,7 +12,7 @@ This will create a proxy at ``127.0.0.1`` on port ``8888``.
 You can use this as a good starting point for writing a proxy or a tunnel!
 
 ### Install
-- npm install socks5
+- npm install socks5server
 
 
 ### License
