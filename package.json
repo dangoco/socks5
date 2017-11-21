@@ -1,15 +1,15 @@
 {
 	"name": "socks5server",
-	"version": "2.0.1",
+	"version": "3.0.0",
 	"description": "A simple SOCKS 5/4/4a implementation and demo proxy",
 	"author": [
 		"Gert Van Gool <gertvangool@gmail.com>",
 		"Tom Zhou <iwebpp@gmail.com>",
-		"Tgohanwotabe <gohanwotabe@gmail.com>"
+		"gohanwotabe <gohanwotabe@gmail.com>"
 	],
 	"repository": {
 		"type": "git",
-		"url": "git@github.com:dangoco/socks5-server.git"
+		"url": "git@github.com:dangoco/socks5server.git"
 	},
 	"keywords": [
 		"socks",
