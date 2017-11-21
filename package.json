@@ -11,6 +11,7 @@
 		"type": "git",
 		"url": "git@github.com:dangoco/socks5server.git"
 	},
+	"license": "MIT",
 	"keywords": [
 		"socks",
 		"socks5",
