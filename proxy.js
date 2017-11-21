@@ -29,9 +29,11 @@ server.on('socket',(socket, port, address, proxy_ready)=>{
 		proxy.pipe(socket);
 		socket.pipe(proxy);
 		proxy.on('error',e=>{
+			console.error('connection_error',e);
 			server.emit('connection_error',e);
 		});
 		socket.on('error',e=>{
+			console.error('proxy_error',e);
 			server.emit('proxy_error',e);
 		});
 	});
