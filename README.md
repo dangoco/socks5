@@ -4,16 +4,21 @@ SOCKS v4/v4a/v5 server implementation with user/pass authentication node.js
 A simple SOCKS v5/v4/v4a server implementation and demo proxy.
 
 You can run it easily as:
-
+````
   node proxy.js [options]
+````
 
 This will create a proxy defaults at `127.0.0.1:8888`.
+
 `options`:see `node proxy.js --help`
 
 You can use this as a good starting point for writing a proxy or a tunnel!
 
 ### Install
-- npm install socks5server
+
+```
+npm install socks5server
+```
 
 ### Use the server in your project
 
