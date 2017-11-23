@@ -45,6 +45,13 @@ const net = require('net'),
 	};
 
 
+
+const _005B=Buffer.from([0x00, 0x5b]),
+	_0101=Buffer.from([0x01, 0x01]),
+	_0501=Buffer.from([0x05, 0x01]),
+	_0100=Buffer.from([0x01, 0x00]);
+
+
 const	Address = {
 	read: function (buffer, offset) {
 		if (buffer[offset] == ATYP.IP_V4) {
@@ -77,237 +84,257 @@ Port = {
 	},
 };
 
-function createSocksServer(userpassObj) {
-	let socksServer = net.createServer();
-	socksServer.users=userpassObj;
-	socksServer.on('connection', function(socket) {
-		socket._socksServer=socksServer;
-		socket.once('data',chunk=>{
-			handshake.call(socket,chunk);
+class socksServer extends net.Server{
+	constructor(options,connectionListener){
+		super(options,connectionListener);
+		// this._proxyReady5=this._proxyReady5.bind(this);
+		this.enabledVersion=new Set([SOCKS_VERSION5,SOCKS_VERSION4]);
+		this.socks5={
+			authMethodsList:new Set([AUTHENTICATION.NOAUTH]),
+			authConf:{
+				userpass:new Map(),
+			},
+			authFunc:{
+				[AUTHENTICATION.USERPASS]:this._socks5UserPassAuth.bind(this),
+				[AUTHENTICATION.NOAUTH]:this._socks5NoAuth.bind(this),
+			}
+		};
+		this.on('connection', socket=>{
+			//socket._socksServer=this;
+			socket.on('error',e=>{
+				this.emit('socket_error',socket,e);
+			}).once('data',chunk=>{
+				this.handshake(socket,chunk);
+			}).on('socks_error',e=>{
+				this.emit('socks_error',socket,e);
+			});
 		});
-	});
-	return socksServer;
-}
-
-
-function handshake(chunk) {//'this' is the socket
-	// SOCKS Version 4/5 is the only support version
-	if (chunk[0] == SOCKS_VERSION5) {
-		this.socksVersion = SOCKS_VERSION5;
-		handshake5.call(this,chunk);
-	} else if (chunk[0] == SOCKS_VERSION4) {
-		this.socksVersion = SOCKS_VERSION4;
-		handshake4.call(this,chunk);
-	} else {
-		this.destroy(new Error(`handshake: wrong socks version: ${chunk[0]}`));
 	}
-}
-
-// SOCKS5
-function handshake5(chunk) {//'this' is the socket
-	let method_count = 0;
-
-	// SOCKS Version 5 is the only support version
-	if (chunk[0] != SOCKS_VERSION5) {
-		this.destroy(new Error(`socks5 handshake: wrong socks version: ${chunk[0]}`));
-		return;
+	setSocks5AuthFunc(method,func){//method is the number
+		if(typeof func !== 'function' || typeof method !== 'number')
+			throw(new TypeError('Invalid arguments'));
+		this.socks5.authFunc[method]=func;
 	}
-	// Number of authentication methods
-	method_count = chunk[1];
-
-	this.auth_methods = [];
-	// i starts on 2, since we've read chunk 0 & 1 already
-	for (let i=2; i < method_count + 2; i++) {
-		this.auth_methods.push(chunk[i]);
+	setSocks5AuthMethods(list){
+		if(!Array.isArray(list))
+			throw(new TypeError('Not an Array'));
+		this.socks5.authMethodsList=new Set(list);
 	}
-
-	let resp = Buffer.alloc(2);
-	resp[0] = 0x05;
-
-	// user/pass auth
-	if (this._socksServer.users) {
-		if (this.auth_methods.indexOf(AUTHENTICATION.USERPASS) > -1) {
-			this.once('data',chunk=>{
-				handleAuthRequest.call(this,chunk);
-			});
-			resp[1] = AUTHENTICATION.USERPASS;
-			this.write(resp);
+	deleteSocks5AuthMethod(method){//method is the number
+		return this.socks5.authMethodsList.delete(method);
+	}
+	setSocks5UserPass(user,pass){
+		if(typeof user !== 'string' || typeof pass !== 'string')
+			throw(new TypeError('Invalid username or password'));
+		this.socks5.authConf.userpass.set(user,pass);
+		let methodList=this.socks5.authMethodsList;
+		if(!methodList.has(AUTHENTICATION.USERPASS)){
+			methodList.add(AUTHENTICATION.USERPASS);
+		}
+		if(methodList.has(AUTHENTICATION.NOAUTH)){
+			methodList.delete(AUTHENTICATION.NOAUTH);
+		}
+	}
+	deleteSocks5UserPass(user){
+		return this.socks5.authConf.userpass.delete(user);
+	}
+	handshake(socket,chunk){
+		if(!this.enabledVersion.has(chunk[0])){
+			socket.end();
+			socket.emit('socks_error',`handshake: not enabled version: ${chunk[0]}`);
+		}
+		if (chunk[0] == SOCKS_VERSION5) {
+			socket.socksVersion = SOCKS_VERSION5;
+			this._handshake5(socket,chunk);
+		} else if (chunk[0] == SOCKS_VERSION4) {
+			socket.socksVersion = SOCKS_VERSION4;
+			this._handshake4(socket,chunk);
 		} else {
-			resp[1] = 0xFF;
-			this.end(resp);
-			this.emit('error','unsuported authentication method');
+			socket.end();
+			socket.emit('socks_error',`handshake: wrong socks version: ${chunk[0]}`);
 		}
-	} else
-		// NO Auth
-		if (this.auth_methods.indexOf(AUTHENTICATION.NOAUTH) > -1) {
-			this.once('data',chunk=>{
-				handleConnRequest.call(this,chunk);
-			});
-			resp[1] = AUTHENTICATION.NOAUTH;
-			this.write(resp);
-		} else {
-			resp[1] = 0xFF;
-			this.end(resp);
-			this.emit('error','unsuported authentication method');
-		}
-}
-
-const _005B=Buffer.from([0x00, 0x5b]),
-	_0101=Buffer.from([0x01, 0x01]),
-	_0501=Buffer.from([0x05, 0x01]),
-	_0100=Buffer.from([0x01, 0x00]);
-
-
-// SOCKS4/4a
-function handshake4(chunk) {//'this' is the socket
-	let cmd = chunk[1],
-		address,
-		port,
-		uid;
-
-	// Wrong version!
-	if (chunk[0] !== SOCKS_VERSION4) {
-		this.end(_005B);
-		this.emit('error',`socks4 handleConnRequest: wrong socks version: ${chunk[0]}`);
-		return;
 	}
-	port = chunk.readUInt16BE(2);
+	_handshake4(socket,chunk){// SOCKS4/4a
+		let cmd = chunk[1],
+			address,
+			port,
+			uid;
 
-	// SOCKS4a
-	if ((chunk[4] === 0 && chunk[5] === chunk[6] === 0) && (chunk[7] !== 0)) {
-		let it = 0;
+		port = chunk.readUInt16BE(2);
 
-		uid = '';
-		for (it = 0; it < 1024; it++) {
-			uid += chunk[8 + it];
-			if (chunk[8 + it] === 0x00)
-				break;
-		}
-		address = '';
-		if (chunk[8 + it] === 0x00) {
-			for (it++; it < 2048; it++) {
-				address += chunk[8 + it];
+		// SOCKS4a
+		if ((chunk[4] === 0 && chunk[5] === chunk[6] === 0) && (chunk[7] !== 0)) {
+			var it = 0;
+
+			uid = '';
+			for (it = 0; it < 1024; it++) {
+				uid += chunk[8 + it];
 				if (chunk[8 + it] === 0x00)
 					break;
 			}
-		}
-		if (chunk[8 + it] === 0x00) {
-			// DNS lookup
-			DNS.lookup(address, function (err, ip, family) {
-				if (err) {
-					this.end(_005B);
-					this.emit('error',err);
-					return;
-				} else {
-					this.socksAddress = ip;
-					this.socksPort = port;
-					this.socksUid = uid;
-
-					if (cmd == REQUEST_CMD.CONNECT) {
-						this.request = chunk;
-						this._socksServer.emit('socket',this, port, ip, proxyReady4.bind(this));
-					} else {
-						this.end(_005B);
-						return;
-					}
+			address = '';
+			if (chunk[8 + it] === 0x00) {
+				for (it++; it < 2048; it++) {
+					address += chunk[8 + it];
+					if (chunk[8 + it] === 0x00)
+						break;
 				}
-			});
+			}
+			if (chunk[8 + it] === 0x00) {
+				// DNS lookup
+				DNS.lookup(address,(err, ip, family)=>{
+					if (err) {
+						socket.end(_005B);
+						socket.emit('socks_error',err);
+						return;
+					} else {
+						socket.socksAddress = ip;
+						socket.socksPort = port;
+						socket.socksUid = uid;
+
+						if (cmd == REQUEST_CMD.CONNECT) {
+							socket.request = chunk;
+							this.emit('socket',socket, port, ip, 'tcp', proxyReady4.bind(socket));
+						} else {
+							socket.end(_005B);
+							return;
+						}
+					}
+				});
+			} else {
+				socket.end(_005B);
+				return;
+			}
 		} else {
-			this.end(_005B);
+			// SOCKS4
+			address = util.format('%s.%s.%s.%s', chunk[4], chunk[5], chunk[6], chunk[7]);
+
+			uid = '';
+			for (it = 0; it < 1024; it++) {
+				uid += chunk[8 + it];
+				if (chunk[8 + it] == 0x00)
+					break;
+			}
+
+			socket.socksAddress = address;
+			socket.socksPort = port;
+			socket.socksUid = uid;
+
+			if (cmd == REQUEST_CMD.CONNECT) {
+				socket.request = chunk;
+				this.emit('socket',socket, port, address, 'tcp', proxyReady4.bind(socket));
+			} else {
+				socket.end(_005B);
+				return;
+			}
+		}
+	}
+	_handshake5(socket,chunk){
+		let method_count = 0;
+
+		// Number of authentication methods
+		method_count = chunk[1];
+
+		if(chunk.byteLength<method_count+2){
+			socket.end();
+			socket.emit('socks_error','socks5 handshake error: too short chunk');
 			return;
 		}
-	} else {
-		// SOCKS4
-		address = util.format('%s.%s.%s.%s', chunk[4], chunk[5], chunk[6], chunk[7]);
 
-		uid = '';
-		for (it = 0; it < 1024; it++) {
-			uid += chunk[8 + it];
-			if (chunk[8 + it] == 0x00)
-				break;
+		let availableAuthMethods=[];
+		// i starts on 2, since we've read chunk 0 & 1 already
+		for (let i=2; i < method_count + 2; i++) {
+			if(this.socks5.authMethodsList.has(chunk[i])){
+				availableAuthMethods.push(chunk[i]);
+			}
 		}
 
-		this.socksAddress = address;
-		this.socksPort = port;
-		this.socksUid = uid;
+		let resp = Buffer.from([
+					SOCKS_VERSION5,//response version 5
+					availableAuthMethods[0]//select the first auth method
+				]);
+		let authFunc=this.socks5.authFunc[resp[1]];
 
-		if (cmd == REQUEST_CMD.CONNECT) {
-			this.request = chunk;
-			this._socksServer.emit('socket',this, port, address, proxyReady4.bind(this));
-		} else {
-			this.end(_005B);
+		if(availableAuthMethods.length===0 || !authFunc){//no available auth method
+			resp[1] = AUTHENTICATION.NONE;
+			socket.end(resp);
+			socket.emit('socks_error','unsuported authentication method');
 			return;
 		}
-	}
-}
 
-function handleAuthRequest(chunk) {//'this' is the socket
-	let username,
-		password;
-	// Wrong version!
-	if (chunk[0] !== 1) { // MUST be 1
-		this.end(_0101);
-		this.emit('error',`socks5 handleAuthRequest: wrong socks version: ${chunk[0]}`);
-		return;
-	}
- 
-	try {
-		let na = [],pa=[],ni,pi;
-		for (ni=   2;ni<(2+chunk[1]);    ni++) na.push(chunk[ni]);username = Buffer.from(na).toString('utf8');
-		for (pi=ni+1;pi<(ni+1+chunk[ni]);pi++) pa.push(chunk[pi]);password = Buffer.from(pa).toString('utf8');       
-	} catch (e) {
-		this.end(_0101);
-		this.emit('error',`socks5 handleAuthRequest: username/password ${e}`);
-		return;
-	}
-
-	// check user:pass
-	let users=this._socksServer.users;
-	if (users && (username in users) && users[username]===password) {
-		this.once('data',chunk=>{
-			handleConnRequest.call(this,chunk);
+		// auth
+		socket.once('data',chunk=>{
+			authFunc.call(this,socket,chunk);
 		});
-		this.write(_0100);
-	} else {
-		this.end(_0101);
-		this.emit('error',`socks5 handleConnRequest: wrong socks version: ${chunk[0]}`);
-		return;
+
+		socket.write(resp);
+	}
+	_socks5UserPassAuth(socket,chunk){
+		let username,password;
+		// Wrong version!
+		if (chunk[0] !== 1) { // MUST be 1
+			socket.end(_0101);
+			socket.emit('socks_error',`socks5 handleAuthRequest: wrong socks version: ${chunk[0]}`);
+			return;
+		}
+	 
+		try {
+			let na = [],pa=[],ni,pi;
+			for (ni=2;ni<(2+chunk[1]);ni++) na.push(chunk[ni]);username = Buffer.from(na).toString('utf8');
+			for (pi=ni+1;pi<(ni+1+chunk[ni]);pi++) pa.push(chunk[pi]);password = Buffer.from(pa).toString('utf8');       
+		} catch (e) {
+			socket.end(_0101);
+			socket.emit('socks_error',`socks5 handleAuthRequest: username/password ${e}`);
+			return;
+		}
+
+		// check user:pass
+		let users=this.socks5.authConf.userpass;
+		if (users && users.has(username) && users.get(username)===password) {
+			socket.once('data',chunk=>{
+				this._socks5HandleRequest(socket,chunk);
+			});
+			socket.write(_0100);
+		} else {
+			socket.end(_0101);
+			socket.emit('socks_error',`socks5 handleConnRequest: wrong socks version: ${chunk[0]}`);
+			return;
+		}
+	}
+	_socks5NoAuth(socket,chunk){
+		this._socks5HandleRequest(socket,chunk);
+	}
+	_socks5HandleRequest(socket,chunk){
+		let cmd=chunk[1],
+			address,
+			port,
+			offset=3;
+		/* if (chunk[2] == 0x00) {
+			this.end(util.format('%d%d', 0x05, 0x01));
+			errorLog('socks5 handleConnRequest: Mangled request. Reserved field is not null: %d', chunk[offset]);
+			return;
+		} */
+		try {
+			address = Address.read(chunk, 3);
+			port = Port.read(chunk, 3);
+		} catch (e) {
+			socket.end();
+			socket.emit('socks_error',e);
+			return;
+		}
+
+		if (cmd === REQUEST_CMD.CONNECT) {
+			socket.request = chunk;
+			this.emit('socket',socket, port, address, 'tcp', proxyReady5.bind(socket));
+		} else {
+			socket.end(_0501);
+			return;
+		}
 	}
 }
+socksServer.AUTHENTICATION=AUTHENTICATION;
 
-function handleConnRequest(chunk) {//'this' is the socket
-	let cmd=chunk[1],
-		address,
-		port,
-		offset=3;
-	// Wrong version!
-	if (chunk[0] !== SOCKS_VERSION5) {
-		this.end(_0501);
-		this.emit('error',`socks5 handleConnRequest: wrong socks version: ${chunk[0]}`);
-		return;
-	} /* else if (chunk[2] == 0x00) {
-		this.end(util.format('%d%d', 0x05, 0x01));
-		errorLog('socks5 handleConnRequest: Mangled request. Reserved field is not null: %d', chunk[offset]);
-		return;
-	} */
-	try {
-		address = Address.read(chunk, 3);
-		port = Port.read(chunk, 3);
-	} catch (e) {
-		this.destroy(e);
-		return;
-	}
-
-	if (cmd == REQUEST_CMD.CONNECT) {
-		this.request = chunk;
-		this._socksServer.emit('socket',this, port, address, proxyReady5.bind(this));
-	} else {
-		this.end(_0501);
-		return;
-	}
-}
-
-function proxyReady5() {
+function proxyReady5() {//'this' is the socket
 	// creating response
 	let resp = Buffer.allocUnsafe(this.request.length);
 	this.request.copy(resp);
@@ -319,7 +346,7 @@ function proxyReady5() {
 	this.write(resp);
 }
 
-function proxyReady4() {
+function proxyReady4() {//'this' is the socket
 	// creating response
 	let resp = Buffer.allocUnsafe(8);
 	
@@ -340,6 +367,14 @@ function proxyReady4() {
 	this.write(resp);
 }
 
+
+
+function createSocksServer() {
+	return new socksServer();
+}
+
+
 module.exports = {
-	createServer: createSocksServer
+	createServer: createSocksServer,
+	socksServer,
 };
