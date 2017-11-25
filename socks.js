@@ -86,7 +86,7 @@ Where:
 	};
 
 
-
+//auto reply
 const _005B=Buffer.from([0x00, 0x5b]),
 	_0101=Buffer.from([0x01, 0x01]),
 	_0501=Buffer.from([0x05, 0x01]),
@@ -135,17 +135,17 @@ class socksServer extends net.Server{
 			authConf:{
 				userpass:new Map(),
 			},
-			authFunc:{
-				[AUTHENTICATION.USERPASS]:this._socks5UserPassAuth.bind(this),
-				[AUTHENTICATION.NOAUTH]:this._socks5NoAuth.bind(this),
-			}
+			authFunc:new Map([
+				[AUTHENTICATION.USERPASS,this._socks5UserPassAuth.bind(this)],
+				[AUTHENTICATION.NOAUTH,this._socks5NoAuth.bind(this)],
+			]),
 		};
 		this.on('connection', socket=>{
 			//socket._socksServer=this;
 			socket.on('error',e=>{
 				this.emit('socket_error',socket,e);
 			}).once('data',chunk=>{
-				this.handshake(socket,chunk);
+				this._handshake(socket,chunk);
 			}).on('socks_error',e=>{
 				this.emit('socks_error',socket,e);
 			});
@@ -154,7 +154,7 @@ class socksServer extends net.Server{
 	setSocks5AuthFunc(method,func){//method is the number
 		if(typeof func !== 'function' || typeof method !== 'number')
 			throw(new TypeError('Invalid arguments'));
-		this.socks5.authFunc[method]=func;
+		this.socks5.authFunc.set(method,func);
 	}
 	setSocks5AuthMethods(list){
 		if(!Array.isArray(list))
@@ -179,7 +179,7 @@ class socksServer extends net.Server{
 	deleteSocks5UserPass(user){
 		return this.socks5.authConf.userpass.delete(user);
 	}
-	handshake(socket,chunk){
+	_handshake(socket,chunk){
 		if(!this.enabledVersion.has(chunk[0])){
 			socket.end();
 			socket.emit('socks_error',`handshake: not enabled version: ${chunk[0]}`);
@@ -294,7 +294,7 @@ class socksServer extends net.Server{
 					SOCKS_VERSION5,//response version 5
 					availableAuthMethods[0]//select the first auth method
 				]);
-		let authFunc=this.socks5.authFunc[resp[1]];
+		let authFunc=this.socks5.authFunc.get(resp[1]);
 
 		if(availableAuthMethods.length===0 || !authFunc){//no available auth method
 			resp[1] = AUTHENTICATION.NONE;
@@ -338,7 +338,7 @@ class socksServer extends net.Server{
 			socket.write(_0100);
 		} else {
 			socket.end(_0101);
-			socket.emit('socks_error',`socks5 handleConnRequest: wrong socks version: ${chunk[0]}`);
+			socket.emit('socks_error',`socks5 handleConnRequest: auth failed`);
 			return;
 		}
 	}

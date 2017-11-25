@@ -30,7 +30,7 @@ var server=socks5server.createServer();
 //or
 var server=new socks5server.socksServer();
 ```
-
+The `proxy.js` is a simple demo of the server.
 
 ### Implementations
 
