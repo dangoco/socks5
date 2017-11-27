@@ -52,7 +52,7 @@ function TCPRelay(socket, port, address, CMD_REPLY){
 		if(!e)
 			console.log('Proxy closed',`${address}:${port}`);
 		else{
-			console.log('Proxy failed',`${address}:${port}`,e);
+			console.log('Proxy failed',`${address}:${port}`);
 		}
 	});
 }
