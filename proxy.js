@@ -36,9 +36,7 @@ function TCPRelay(socket, port, address, CMD_REPLY){
 	let proxy = net.createConnection({port:port, host:address,localAddress:commander.localAddress||undefined}, CMD_REPLY);
 	proxy.on('connect',()=>{
 		CMD_REPLY();
-		info('[TCP] %s:%d ==> %s:%d',
-			socket.remoteAddress,socket.remotePort,
-			proxy.remoteAddress,proxy.remotePort);
+		info(`[TCP] ${socket.remoteAddress}:${socket.remotePort} ==> ${net.isIP(address)?address:address+'('+proxy.remoteAddress+')'}:${proxy.remotePort}`);
 		proxy.pipe(socket);
 		socket.pipe(proxy);
 		proxy.on('error',e=>{
@@ -90,6 +88,7 @@ function UDPRelay(socket, targetPort, targetAddress, CMD_REPLY){
 		setTimeout(()=>socket.close(),2000);
 		return;
 	}
+	info(`[UDP] ${socket.remoteAddress}:${socket.remotePort} ==> ${net.isIP(targetAddress)?targetAddress:targetAddress+'('+targetAddress+')'}:${targetPort}`);
 	let relay=dgram.createSocket('udp'+addrV);
 	relay.closed=false;
 	relay.bind(()=>{
