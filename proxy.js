@@ -66,9 +66,12 @@ const dnsOpt={
 	hints:dns.ADDRCONFIG | dns.V4MAPPED
 }
 function UDPHandle(socket, targetPort, targetAddress, CMD_REPLY){
+console.log('UDP','connectino')
 	if(!net.isIP(targetAddress)){
+console.log('UDP','lookup')
 		dns.lookup(targetAddress,dnsOpt,(err, address, family)=>{
 			if(err){
+console.log('UDP','lookup failed')
 				CMD_REPLY(0x04);//Host unreachable
 				setTimeout(()=>socket.close(),2000);
 				return;
@@ -80,10 +83,12 @@ function UDPHandle(socket, targetPort, targetAddress, CMD_REPLY){
 	UDPRelay(socket, targetPort, targetAddress, CMD_REPLY);
 }
 function UDPRelay(socket, targetPort, targetAddress, CMD_REPLY){
+console.log('UDP','handling udp')
 	let addrV;
 	if(net.isIPv4(targetAddress))addrV=4;
 	else if(net.isIPv6(targetAddress))addrV=6;
 	else{
+console.log('UDP','address error')
 		CMD_REPLY(0x01);
 		setTimeout(()=>socket.close(),2000);
 		return;
