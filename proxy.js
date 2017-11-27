@@ -103,6 +103,7 @@ console.log('UDP','bound')
 	//relay.send(msg, [offset, length,] port [, address] [, callback])
 	relay.on('message',(msg,info)=>{
 console.log('UDP','diff target')
+		if(targetAddress!=='0.0.0.0')
 		if(info.port!==targetPort || info.address!== targetAddress){
 			/*
 				It MUST drop any datagrams
