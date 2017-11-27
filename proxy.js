@@ -97,10 +97,12 @@ console.log('UDP','address error')
 	let relay=dgram.createSocket('udp'+addrV);
 	relay.closed=false;
 	relay.bind(()=>{
+console.log('UDP','bound')
 		CMD_REPLY();
 	});
 	//relay.send(msg, [offset, length,] port [, address] [, callback])
 	relay.on('message',(msg,info)=>{
+console.log('UDP','diff target')
 		if(info.port!==targetPort || info.address!== targetAddress){
 			/*
 				It MUST drop any datagrams
@@ -109,6 +111,7 @@ console.log('UDP','address error')
 			*/
 			return;
 		}
+console.log('UDP','received')
 		socket.write(Buffer.concat([socket.request,msg]));
 
 	}).on('error',e=>{
