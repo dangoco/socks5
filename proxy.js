@@ -66,7 +66,7 @@ const dnsOpt={
 	hints:dns.ADDRCONFIG | dns.V4MAPPED
 }
 function UDPHandle(socket, targetPort, targetAddress, CMD_REPLY){
-console.log('UDP','connectino')
+console.log('UDP','connection')
 	if(!net.isIP(targetAddress)){
 console.log('UDP','lookup')
 		dns.lookup(targetAddress,dnsOpt,(err, address, family)=>{
@@ -143,6 +143,7 @@ console.log('UDP','received')
 		} else if (chunk[3] == ATYP.IP_V6) {
 			dataStart+=16;
 		}
+console.log('UDP','send')
 		relay.send(chunk.subarray(dataStart),targetPort,targetAddress);
 	});
 }
