@@ -367,7 +367,7 @@ class socksServer extends net.Server{
 		if (cmd === REQUEST_CMD.CONNECT) {
 			socket.request = chunk;
 			this.emit('socket',socket, port, address, 'tcp', CMD_REPLY5.bind(socket));
-		} else if(cmd === REQUEST_CMD.ASSOCIATE){
+		} else if(cmd === REQUEST_CMD.UDP_ASSOCIATE){
 			socket.request = chunk;
 			this.emit('socket',socket, port, address, 'udp', CMD_REPLY5.bind(socket));
 		}else {
