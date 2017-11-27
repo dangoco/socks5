@@ -1,6 +1,8 @@
 SOCKS v4/v4a/v5 server implementation with user/pass authentication node.js
 =============================================================================
 
+<h1 style="color:red">Testing UDP relay</h1>
+
 A simple SOCKS v5/v4/v4a server implementation and demo proxy.
 
 You can run it easily as:
@@ -40,9 +42,10 @@ The `proxy.js` is a simple demo of the server.
 
 #### Socks4
 * user 					✅
+* ❓
 
 #### Socks4a
-* DNS 					✅
+* ❓
 
 #### Socks5
 * address
@@ -59,10 +62,14 @@ The `proxy.js` is a simple demo of the server.
 
 * CMD
 	* connect			✅
-	* udp				❌ (hope if someone can help)
+	* udp				❌ (hope if anyone can help)
+		fragment		❌
 	* bind 				❌
 	
-socks replsy not completed
+socks reply not completed
+
+RFC:
+* [socks5](https://www.ietf.org/rfc/rfc1928.txt)
 
 ### License
 
