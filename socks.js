@@ -86,17 +86,18 @@ Where:
 	};
 
 
-//auto reply
-const _005B=Buffer.from([0x00, 0x5b]),
-	_0101=Buffer.from([0x01, 0x01]),
-	_0501=Buffer.from([0x05, 0x01]),
-	_0100=Buffer.from([0x01, 0x00]);
+//CMD reply
+const _005B=Buffer.from([0x00, 0x5b]),//?
+	_0101=Buffer.from([0x01, 0x01]),//auth failed
+	_0501=Buffer.from([0x05, 0x01]),//general SOCKS server failure
+	_0507=Buffer.from([0x05, 0x01]),//Command not supported
+	_0100=Buffer.from([0x01, 0x00]);//auth succeeded
 
 
 const	Address = {
 	read: function (buffer, offset) {
 		if (buffer[offset] == ATYP.IP_V4) {
-			return util.format('%s.%s.%s.%s', buffer[offset+1], buffer[offset+2], buffer[offset+3], buffer[offset+4]);
+			return `${buffer[offset+1]}.${buffer[offset+2]}.${buffer[offset+3]}.${buffer[offset+4]}`;
 		} else if (buffer[offset] == ATYP.DNS) {
 			return buffer.toString('utf8', offset+2, offset+2+buffer[offset+1]);
 		} else if (buffer[offset] == ATYP.IP_V6) {
@@ -128,7 +129,6 @@ Port = {
 class socksServer extends net.Server{
 	constructor(options,connectionListener){
 		super(options,connectionListener);
-		// this._proxyReady5=this._proxyReady5.bind(this);
 		this.enabledVersion=new Set([SOCKS_VERSION5,SOCKS_VERSION4]);
 		this.socks5={
 			authMethodsList:new Set([AUTHENTICATION.NOAUTH]),
@@ -148,6 +148,10 @@ class socksServer extends net.Server{
 				this._handshake(socket,chunk);
 			}).on('socks_error',e=>{
 				this.emit('socks_error',socket,e);
+			}).on('close',()=>{
+				setImmediate(()=>{
+					socket.removeAllListeners();
+				});
 			});
 		});
 	}
@@ -235,7 +239,7 @@ class socksServer extends net.Server{
 
 						if (cmd == REQUEST_CMD.CONNECT) {
 							socket.request = chunk;
-							this.emit('socket',socket, port, ip, 'tcp', proxyReady4.bind(socket));
+							this.emit('socket',socket, port, ip, 'tcp', CMD_REPLY4.bind(socket));
 						} else {
 							socket.end(_005B);
 							return;
@@ -248,7 +252,7 @@ class socksServer extends net.Server{
 			}
 		} else {
 			// SOCKS4
-			address = util.format('%s.%s.%s.%s', chunk[4], chunk[5], chunk[6], chunk[7]);
+			address = `${chunk[4]}.${chunk[5]}.${chunk[6]}.${chunk[7]}`;
 
 			uid = '';
 			for (it = 0; it < 1024; it++) {
@@ -263,7 +267,7 @@ class socksServer extends net.Server{
 
 			if (cmd == REQUEST_CMD.CONNECT) {
 				socket.request = chunk;
-				this.emit('socket',socket, port, address, 'tcp', proxyReady4.bind(socket));
+				this.emit('socket',socket, port, address, 'tcp', CMD_REPLY4.bind(socket));
 			} else {
 				socket.end(_005B);
 				return;
@@ -345,16 +349,12 @@ class socksServer extends net.Server{
 	_socks5NoAuth(socket,chunk){
 		this._socks5HandleRequest(socket,chunk);
 	}
-	_socks5HandleRequest(socket,chunk){
+	_socks5HandleRequest(socket,chunk){//the chunk is the cmd request head
 		let cmd=chunk[1],
 			address,
 			port,
 			offset=3;
-		/* if (chunk[2] == 0x00) {
-			this.end(util.format('%d%d', 0x05, 0x01));
-			errorLog('socks5 handleConnRequest: Mangled request. Reserved field is not null: %d', chunk[offset]);
-			return;
-		} */
+
 		try {
 			address = Address.read(chunk, 3);
 			port = Port.read(chunk, 3);
@@ -366,26 +366,35 @@ class socksServer extends net.Server{
 
 		if (cmd === REQUEST_CMD.CONNECT) {
 			socket.request = chunk;
-			this.emit('socket',socket, port, address, 'tcp', proxyReady5.bind(socket));
-		} else {
-			socket.end(_0501);
+			this.emit('socket',socket, port, address, 'tcp', CMD_REPLY5.bind(socket));
+		} else if(cmd === REQUEST_CMD.ASSOCIATE){
+			socket.request = chunk;
+			this.emit('socket',socket, port, address, 'udp', CMD_REPLY5.bind(socket));
+		}else {
+			socket.end(_0507);
 			return;
 		}
 	}
 }
 socksServer.AUTHENTICATION=AUTHENTICATION;
 
-function proxyReady5() {//'this' is the socket
+function CMD_REPLY5(REP) {//'this' is the socket
+	if(this.CMD_REPLIED && !this.writable)return;
 	// creating response
 	let resp = Buffer.from(this.request);
-	// rewrite response header
-	resp[0] = SOCKS_VERSION5;
-	resp[1] = SOCKS_REPLY.SUCCEEDED;
+	if(REP){
+		resp[1] = REP;
+		resp=resp.subarray(0,3);
+	}else{
+		resp[1] = SOCKS_REPLY.SUCCEEDED;
+	}
 	resp[2] = 0x00;
 	this.write(resp);
+	this.CMD_REPLIED=true;
 }
 
-function proxyReady4() {//'this' is the socket
+function CMD_REPLY4() {//'this' is the socket
+	if(this.CMD_REPLIED)return;
 	// creating response
 	let resp = Buffer.allocUnsafe(8);
 	
@@ -404,6 +413,7 @@ function proxyReady4() {//'this' is the socket
 	resp.writeUInt8(parseInt(ips[3]), 7);
 	
 	this.write(resp);
+	this.CMD_REPLIED=true;
 }
 
 
@@ -416,4 +426,6 @@ function createSocksServer() {
 module.exports = {
 	createServer: createSocksServer,
 	socksServer,
+	Address,
+	Port,
 };
