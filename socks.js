@@ -379,7 +379,7 @@ class socksServer extends net.Server{
 socksServer.AUTHENTICATION=AUTHENTICATION;
 
 function CMD_REPLY5(REP) {//'this' is the socket
-	if(this.CMD_REPLIED && !this.writable)return;
+	if(this.CMD_REPLIED || !this.writable)return;
 	// creating response
 	let resp = Buffer.from(this.request);
 	if(REP){
