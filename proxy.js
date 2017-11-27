@@ -47,7 +47,7 @@ function TCPRelay(socket, port, address, CMD_REPLY){
 		});
 	}).on('error',e=>{
 		CMD_REPLY(0x01);
-		console.error('proxy error:',e);
+		console.error('proxy error:',e.message);
 	});
 	 
 	socket.on('close',e=>{
