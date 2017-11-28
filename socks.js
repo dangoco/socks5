@@ -421,7 +421,8 @@ console.log('UDP: port bound')
 				CMD_REPLY(0x00,'0.0.0.0',this.boundPort);//success
 		});
 		relay.on('message',(msg,info)=>{
-console.log('UDP: message')
+console.log('UDP: message',info)
+console.log('UDP: state',this)
 			if(info.address===this.clientAddress){//from client,send to target
 				if(!this.clientPort)this.clientPort=info.port;//set the client port
 				else if(this.clientPort!==info.port){return;}//drop
