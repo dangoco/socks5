@@ -384,6 +384,7 @@ const dnsOpt={
 };
 class UDPRelay{
 	constructor(socket, port, address, CMD_REPLY){//the address must be a ip.  CMD_REPLY(reply_code)
+console.log('create UDP relay')
 		this.replyHead=replyHead5(address,port);//the head to be added before the reply to the client
 		this.targetAddress=address;
 		this.targetIP;
@@ -398,9 +399,11 @@ class UDPRelay{
 		else{
 			DNS.lookup(address,dnsOpt,(err, address, family)=>{
 				if(err){
+console.log('UDP: dns error')
 					CMD_REPLY(0x04);//Host unreachable
 					return;
 				}
+console.log('UDP: dns lookup finished')
 				ipFamily=family;
 				this.targetIP=address;
 				if(this.boundPort)
@@ -412,11 +415,13 @@ class UDPRelay{
 		let relay=dgram.createSocket('udp'+ipFamily);
 		relay.closed=false;
 		relay.bind(()=>{
+console.log('UDP: port bound')
 			this.boundPort=relay.address().port;
 			if(this.targetIP)
 				CMD_REPLY(0x00,'0.0.0.0',this.boundPort);//success
 		});
 		relay.on('message',(msg,info)=>{
+console.log('UDP: message')
 			if(info.address===this.clientAddress){//from client,send to target
 				if(!this.clientPort)this.clientPort=info.port;//set the client port
 				else if(this.clientPort!==info.port){return;}//drop
@@ -448,7 +453,6 @@ class UDPRelay{
 		socket.on('close',()=>{
 			relay.close();
 		});
-		//emit('udp',this,CMD_REPLY) 
 	}
 }
 
