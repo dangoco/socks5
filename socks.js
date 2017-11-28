@@ -408,7 +408,7 @@ class UDPRelay{
 				ipFamily=family;
 				this.targetIP=address;
 				if(this.boundPort)
-					CMD_REPLY(0x00);//success
+					CMD_REPLY(0x00,'0.0.0.0',this.boundPort);//success
 			});
 		}
 
@@ -418,7 +418,7 @@ class UDPRelay{
 		relay.bind(()=>{
 			this.boundPort=relay.address().port;
 			if(this.targetIP)
-				CMD_REPLY(0x00);//success
+				CMD_REPLY(0x00,'0.0.0.0',this.boundPort);//success
 		});
 		relay.on('message',(msg,info)=>{
 			if(info.address===this.clientAddress){//from client,send to target
