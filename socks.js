@@ -463,10 +463,10 @@ function replyHead5(addr,port){
 	if(!addr)addrBuf=_0000;
 	else{
 		if(net.isIPv4(addr)){
-			addrBuf=Buffer.from(ipAddress.Address4(addr).toArray());				
+			addrBuf=Buffer.from((new ipAddress.Address4(addr)).toArray());				
 		}else if(net.isIPv6(addr)){
 			ATYP=0x04;
-			addrBuf=Buffer.from(ipAddress.Address6(addr).toUnsignedByteArray());				
+			addrBuf=Buffer.from((new ipAddress.Address6(addr)).toUnsignedByteArray());				
 		}else{
 			ATYP=0x03;
 			addr=Buffer.from(addr);
