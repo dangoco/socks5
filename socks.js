@@ -133,6 +133,7 @@ class socksServer extends net.Server{
 	constructor(options,connectionListener){
 		super(options,connectionListener);
 		this.enabledVersion=new Set([SOCKS_VERSION5,SOCKS_VERSION4]);
+		this.enabledCmd=new Set([REQUEST_CMD.CONNECT,REQUEST_CMD.UDP_ASSOCIATE]);
 		this.socks5={
 			authMethodsList:new Set([AUTHENTICATION.NOAUTH]),
 			authConf:{
@@ -146,7 +147,7 @@ class socksServer extends net.Server{
 		this.on('connection', socket=>{
 			//socket._socksServer=this;
 			socket.on('error',e=>{
-				this.emit('socket_error',socket,e);
+				this.emit('client_error',socket,e);
 			}).once('data',chunk=>{
 				this._handshake(socket,chunk);
 			}).on('socks_error',e=>{
@@ -355,6 +356,10 @@ class socksServer extends net.Server{
 			address,
 			port,
 			offset=3;
+		if(!this.enabledCmd.has(cmd)){
+			CMD_REPLY5.call(socket,0x07);
+			return;
+		}
 
 		try {
 			address = Address.read(chunk, 3);
@@ -364,6 +369,8 @@ class socksServer extends net.Server{
 			socket.emit('socks_error',e);
 			return;
 		}
+		socket.targetAddress=address;
+		socket.targetPort=port;
 
 		if (cmd === REQUEST_CMD.CONNECT) {
 			socket.request = chunk;
@@ -377,7 +384,6 @@ class socksServer extends net.Server{
 		}
 	}
 }
-socksServer.AUTHENTICATION=AUTHENTICATION;
 
 const dnsOpt={
 	hints:DNS.ADDRCONFIG | DNS.V4MAPPED
@@ -490,13 +496,13 @@ function CMD_REPLY5(REP,addr,port) {//'this' is the socket
 	// creating response
 	let resp;
 	if(REP){//something wrong
-		console.log(new Error('ERROR REPLY:'+REP))
 		resp = Buffer.from([0x05,REP,0x00]);
+		this.end(resp);
 	}else{
 		resp=replyHead5(addr,port);
 		resp[0]=0x05;//version 5
+		this.write(resp);
 	}
-	this.write(resp);
 	this.CMD_REPLIED=true;
 	return true;
 }
