@@ -489,7 +489,7 @@ function CMD_REPLY5(REP,addr,port) {//'this' is the socket
 	let resp;
 	if(REP){//something wrong
 		resp = Buffer.from([0x05,REP,0x00]);
-		setTimeout(()=>socket.close(),2000);//close the socket if it is an error reply
+		setTimeout(()=>this.close(),2000);//close the socket if it is an error reply
 	}else{
 		resp=replyHead5(addr,port);
 		resp[0]=0x05;//version 5
