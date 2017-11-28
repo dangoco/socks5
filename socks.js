@@ -384,7 +384,7 @@ const dnsOpt={
 };
 class UDPRelay{
 	constructor(socket, port, address, CMD_REPLY){//the address must be a ip.  CMD_REPLY(reply_code)
-console.log('create UDP relay')
+console.log('create UDP relay:',address,":",port)
 		this.replyHead=replyHead5(address,port);//the head to be added before the reply to the client
 		this.targetAddress=address;
 		this.targetIP;
