@@ -389,6 +389,7 @@ console.log('create UDP relay')
 		this.targetAddress=address;
 		this.targetIP;
 		this.boundPort;
+		this.boundAddress;
 		this.targetPort;
 		this.clientPort;
 		this.clientAddress=socket.remoteAddress;
@@ -407,7 +408,7 @@ console.log('UDP: dns lookup finished')
 				ipFamily=family;
 				this.targetIP=address;
 				if(this.boundPort)
-					CMD_REPLY(0x00,'0.0.0.0',this.boundPort);//success
+					CMD_REPLY(0x00,this.boundAddress,this.boundPort);//success
 			});
 		}
 
@@ -417,8 +418,9 @@ console.log('UDP: dns lookup finished')
 		relay.bind(()=>{
 console.log('UDP: port bound')
 			this.boundPort=relay.address().port;
+			this.boundPort=relay.address().address;
 			if(this.targetIP)
-				CMD_REPLY(0x00,'0.0.0.0',this.boundPort);//success
+				CMD_REPLY(0x00,this.boundAddress,this.boundPort);//success
 		});
 		relay.on('message',(msg,info)=>{
 console.log('UDP: message',info)
