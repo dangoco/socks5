@@ -382,11 +382,6 @@ socksServer.AUTHENTICATION=AUTHENTICATION;
 const dnsOpt={
 	hints:DNS.ADDRCONFIG | DNS.V4MAPPED
 };
-/*
-events:
-	datagram:(sourceAddr,sourcePort,targetAddr,targetPort,data)
-	close
-*/
 class UDPRelay{
 	constructor(socket, port, address, CMD_REPLY){//the address must be a ip.  CMD_REPLY(reply_code)
 		this.replyHead=replyHead5(address,port);//the head to be added before the reply to the client
@@ -488,8 +483,8 @@ function CMD_REPLY5(REP,addr,port) {//'this' is the socket
 	// creating response
 	let resp;
 	if(REP){//something wrong
+		console.log(new Error('ERROR REPLY:'+REP))
 		resp = Buffer.from([0x05,REP,0x00]);
-		setTimeout(()=>this.close(),2000);//close the socket if it is an error reply
 	}else{
 		resp=replyHead5(addr,port);
 		resp[0]=0x05;//version 5
