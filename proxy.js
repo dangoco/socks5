@@ -1,6 +1,11 @@
 
 var net = require('net'),
-	{createServer,Address,Port} = require('./socks.js'),
+	{
+		createServer,
+		Address,
+		Port,
+		UDPRelay,
+	} = require('./socks.js'),
 	info = console.log.bind(console),
 	dgram = require('dgram'),
 	dns = require('dns');
@@ -57,108 +62,15 @@ function TCPRelay(socket, port, address, CMD_REPLY){
 	});
 }
 
-/*
-udp request relay
-parse source fragment and send them to the target
-then receive the response and push back to source
-*/
-const dnsOpt={
-	hints:dns.ADDRCONFIG | dns.V4MAPPED
-}
-function UDPHandle(socket, targetPort, targetAddress, CMD_REPLY){
-console.log('UDP','connection')
-	if(!net.isIP(targetAddress)){
-console.log('UDP','lookup')
-		dns.lookup(targetAddress,dnsOpt,(err, address, family)=>{
-			if(err){
-console.log('UDP','lookup failed')
-				CMD_REPLY(0x04);//Host unreachable
-				setTimeout(()=>socket.close(),2000);
-				return;
-			}
-			UDPRelay(socket, targetPort, address, CMD_REPLY);
-		});
-		return;
-	}
-	UDPRelay(socket, targetPort, targetAddress, CMD_REPLY);
-}
-function UDPRelay(socket, targetPort, targetAddress, CMD_REPLY){
-console.log('UDP','handling udp')
-	let addrV;
-	if(net.isIPv4(targetAddress))addrV=4;
-	else if(net.isIPv6(targetAddress))addrV=6;
-	else{
-console.log('UDP','address error')
-		CMD_REPLY(0x01);
-		setTimeout(()=>socket.close(),2000);
-		return;
-	}
-	info(`[UDP] ${socket.remoteAddress}:${socket.remotePort} ==> ${net.isIP(targetAddress)?targetAddress:targetAddress+'('+targetAddress+')'}:${targetPort}`);
-	let relay=dgram.createSocket('udp'+addrV);
-	relay.closed=false;
-	relay.bind(()=>{
-console.log('UDP','bound')
-		CMD_REPLY();
-	});
-	//relay.send(msg, [offset, length,] port [, address] [, callback])
-	relay.on('message',(msg,info)=>{
-console.log('UDP','diff target')
-		if(targetAddress!=='0.0.0.0')
-		if(info.port!==targetPort || info.address!== targetAddress){
-			/*
-				It MUST drop any datagrams
-				arriving from any source IP address other than the one recorded for
-				the particular association.
-			*/
-			return;
-		}
-console.log('UDP','received')
-		socket.write(Buffer.concat([socket.request,msg]));
-
-	}).on('error',e=>{
-		socket.destroy('relay error');
-	}).on('close',()=>{
-		if(relay.closed)return;
-		relay.removeAllListeners();
-	});
-
-	socket.on('close',e=>{
-		relay.close();
-	}).on('data',chunk=>{
-		if(chunk[1]!==0){//not support fragments
-			return;//drop it
-		}
-		try{
-			var addr=Address.read(chunk,3),
-				port=Port.read(chunk,3);
-		}catch(e){
-			relay.close();
-			return;
-		}
-		let dataStart=6;
-		if (chunk[3] == ATYP.IP_V4) {
-			dataStart+=4;
-		} else if (chunk[3] == ATYP.DNS) {
-			dataStart+=chunk[4];
-		} else if (chunk[3] == ATYP.IP_V6) {
-			dataStart+=16;
-		}
-console.log('UDP','send')
-		relay.send(chunk.subarray(dataStart),targetPort,targetAddress);
-	});
-}
 
 
-server.on('socket',(socket, port, address, protocol, CMD_REPLY)=>{
-	if(protocol==='tcp'){
-		TCPRelay(socket, port, address, CMD_REPLY);
-	}else if(protocol==='udp'){
-		UDPHandle(socket, port, address, CMD_REPLY);
-	}else{
-		socket.destroy('not supported protocol');
-	}
-		
-}).on('error', function (e) {
+
+
+server.on('tcp',TCPRelay)
+.on('udp',(socket, port, address, CMD_REPLY)=>{
+	new UDPRelay(socket, port, address, CMD_REPLY);
+})
+.on('error', function (e) {
 	console.error('SERVER ERROR: %j', e);
 	if(e.code == 'EADDRINUSE') {
 		console.log('Address in use, retrying in 10 seconds...');

@@ -3,6 +3,8 @@
 const net = require('net'),
 	util = require('util'),
 	DNS = require('dns'),
+	events=require('events'),
+	ipAddress=require('ip-address'),
 	SOCKS_VERSION5 = 5,
 	SOCKS_VERSION4 = 4,
 /*
@@ -189,14 +191,12 @@ class socksServer extends net.Server{
 			socket.emit('socks_error',`handshake: not enabled version: ${chunk[0]}`);
 		}
 		if (chunk[0] == SOCKS_VERSION5) {
-			socket.socksVersion = SOCKS_VERSION5;
 			this._handshake5(socket,chunk);
 		} else if (chunk[0] == SOCKS_VERSION4) {
-			socket.socksVersion = SOCKS_VERSION4;
 			this._handshake4(socket,chunk);
 		} else {
 			socket.end();
-			socket.emit('socks_error',`handshake: wrong socks version: ${chunk[0]}`);
+			socket.emit('socks_error',`handshake: socks version not supported: ${chunk[0]}`);
 		}
 	}
 	_handshake4(socket,chunk){// SOCKS4/4a
@@ -366,10 +366,10 @@ class socksServer extends net.Server{
 
 		if (cmd === REQUEST_CMD.CONNECT) {
 			socket.request = chunk;
-			this.emit('socket',socket, port, address, 'tcp', CMD_REPLY5.bind(socket));
+			this.emit('tcp',socket, port, address, CMD_REPLY5.bind(socket));
 		} else if(cmd === REQUEST_CMD.UDP_ASSOCIATE){
 			socket.request = chunk;
-			this.emit('socket',socket, port, address, 'udp', CMD_REPLY5.bind(socket));
+			this.emit('udp',socket, port, address, CMD_REPLY5.bind(socket));
 		}else {
 			socket.end(_0507);
 			return;
@@ -378,19 +378,124 @@ class socksServer extends net.Server{
 }
 socksServer.AUTHENTICATION=AUTHENTICATION;
 
-function CMD_REPLY5(REP) {//'this' is the socket
-	if(this.CMD_REPLIED || !this.writable)return;
-	// creating response
-	let resp = Buffer.from(this.request);
-	if(REP){
-		resp[1] = REP;
-		resp=resp.subarray(0,3);
-	}else{
-		resp[1] = SOCKS_REPLY.SUCCEEDED;
+const dnsOpt={
+	hints:DNS.ADDRCONFIG | DNS.V4MAPPED
+};
+/*
+events:
+	datagram:(sourceAddr,sourcePort,targetAddr,targetPort,data)
+	close
+*/
+class UDPRelay{
+	constructor(socket, port, address, CMD_REPLY){//the address must be a ip.  CMD_REPLY(reply_code)
+		this.replyHead=replyHead5(address,port);//the head to be added before the reply to the client
+		this.targetAddress=address;
+		this.targetIP;
+		this.boundPort;
+		this.targetPort;
+		this.clientPort;
+		this.clientAddress=socket.remoteAddress;
+
+		let ipFamily;
+		if(net.isIPv4(address)){ipFamily=4;this.targetIP=address;}
+		else if(net.isIPv6(address)){ipFamily=6;this.targetIP=address;}
+		else{
+			DNS.lookup(address,dnsOpt,(err, address, family)=>{
+				if(err){
+					CMD_REPLY(0x04);//Host unreachable
+					return;
+				}
+				ipFamily=family;
+				this.targetIP=address;
+				if(this.boundPort)
+					CMD_REPLY(0x00);//success
+			});
+		}
+
+
+		let relay=dgram.createSocket('udp'+ipFamily);
+		relay.closed=false;
+		relay.bind(()=>{
+			this.boundPort=relay.address().port;
+			if(this.targetIP)
+				CMD_REPLY(0x00);//success
+		});
+		relay.on('message',(msg,info)=>{
+			if(info.address===this.clientAddress){//from client,send to target
+				if(!this.clientPort)this.clientPort=info.port;//set the client port
+				else if(this.clientPort!==info.port){return;}//drop
+				if(msg[2]!==0)return;//drop fragments.fragments not supported now
+				let targetAddr=Address.read(msg,3),
+					targetPort=Port.read(msg,3);
+					if(targetPort!==this.targetPort)return;//drop
+					if(targetAddr!==this.targetAddr && targetAddr!==this.targetIP)return;//drop
+				relay.send(msg,this.targetAddr,this.targetPort);
+			}else if(info.address===this.targetIP && info.port===this.targetPort){//send to client
+				if(!this.clientPort)return;//no client port,drop
+				relay.send(Buffer.concat([this.replyHead,msg]),this.clientAddress,this.clientPort);
+			}else{//drop
+				/*
+					It MUST drop any datagrams
+					arriving from any source IP address other than the one recorded for
+					the particular association.
+				*/
+				return;
+			}
+		}).on('error',e=>{
+			if(!CMD_REPLY(0x04))
+				socket.destroy('relay error');
+		}).on('close',()=>{
+			if(relay.closed)return;
+			relay.removeAllListeners();
+		});
+
+		socket.on('close',()=>{
+			relay.close();
+		});
+		//emit('udp',this,CMD_REPLY) 
 	}
-	resp[2] = 0x00;
+}
+
+const _0000=Buffer.from([0,0,0,0]),
+	_00=Buffer.from([0,0]);
+function replyHead5(addr,port){
+	let ATYP=1,addrBuf,portBuf;
+	if(!addr)addrBuf=_0000;
+	else{
+		if(net.isIPv4(addr)){
+			addrBuf=Buffer.from(ipAddress.Address4(addr).toArray());				
+		}else if(net.isIPv6(addr)){
+			ATYP=0x04;
+			addrBuf=Buffer.from(ipAddress.Address6(addr).toUnsignedByteArray());				
+		}else{
+			ATYP=0x03;
+			addr=Buffer.from(addr);
+			if(addr.byteLength>255)
+				throw(new Error('too long domain name'));
+			addrBuf=Buffer.concat([Buffer.from([addr.byteLength]),addr]);
+		}
+	}
+	if(!port)portBuf=_00;
+	else{
+		portBuf=Buffer.allocUnsafe(2);
+		portBuf.writeUInt16BE(port);
+	}
+	return Buffer.from([0x05,0x00,0x00,ATYP,...addrBuf,...portBuf]);
+}
+function CMD_REPLY5(REP,addr,port) {//'this' is the socket
+	if(this.CMD_REPLIED || !this.writable)return false;//prevent it from replying twice
+	// creating response
+	let resp;
+	if(REP){//something wrong
+		resp = Buffer.from([0x05,REP,0x00]);
+		setTimeout(()=>socket.close(),2000);//close the socket if it is an error reply
+	}else{
+		resp=replyHead5(addr,port);
+		resp[0]=0x05;//version 5
+	}
 	this.write(resp);
 	this.CMD_REPLIED=true;
+	return true;
 }
 
 function CMD_REPLY4() {//'this' is the socket
@@ -426,6 +531,7 @@ function createSocksServer() {
 module.exports = {
 	createServer: createSocksServer,
 	socksServer,
+	UDPRelay,
 	Address,
 	Port,
 };
