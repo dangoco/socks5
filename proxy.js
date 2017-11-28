@@ -6,9 +6,7 @@ var net = require('net'),
 		Port,
 		UDPRelay,
 	} = require('./socks.js'),
-	info = console.log.bind(console),
-	dgram = require('dgram'),
-	dns = require('dns');
+	info = console.log.bind(console);
 var commander = require('commander');
 	
 commander

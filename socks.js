@@ -3,6 +3,7 @@
 const net = require('net'),
 	util = require('util'),
 	DNS = require('dns'),
+	dgram = require('dgram'),
 	events=require('events'),
 	ipAddress=require('ip-address'),
 	SOCKS_VERSION5 = 5,
