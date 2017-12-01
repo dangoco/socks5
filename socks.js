@@ -129,6 +129,10 @@ Port = {
 	},
 };
 
+/*
+options:
+	the same as net.Server options
+*/
 class socksServer extends net.Server{
 	constructor(options,connectionListener){
 		super(options,connectionListener);
