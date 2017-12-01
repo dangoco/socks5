@@ -8,7 +8,7 @@ A simple SOCKS v5/v4/v4a server implementation and demo proxy.
 You can run it easily as:
 
 ```
-  node proxy.js [options]
+node proxy.js [options]
 ```
 
 This will create a proxy defaults at `127.0.0.1:8888`.
