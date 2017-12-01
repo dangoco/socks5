@@ -1,7 +1,11 @@
 
 var net = require('net'),
-	socks = require('./socks.js'),
-	info = console.log.bind(console);
+	{
+		createServer,
+		Address,
+		Port,
+		UDPRelay,
+	} = require('./socks.js');
 var commander = require('commander');
 	
 commander
@@ -16,46 +20,55 @@ commander
 // The server accepts SOCKS connections. This particular server acts as a proxy.
 var HOST=commander.host||'127.0.0.1',
 	PORT=commander.port||'8888',
-	server = socks.createServer();
+	server = createServer();
 
-info('server started at ',HOST,':',PORT);
+console.log('server starting at ',HOST,':',PORT);
 
 if(commander.user){
 	let u=commander.user.split(":");
 	server.setSocks5UserPass(u[0],u[1]);
-	info('user ',commander.user);
+	console.log('user ',commander.user);
+}
+
+/*
+tcp request relay
+directly connect the target and source
+*/
+function TCPRelay(socket, port, address, CMD_REPLY){
+	let proxy = net.createConnection({port:port, host:address,localAddress:commander.localAddress||undefined}, CMD_REPLY);
+	proxy.targetAddress=address;
+	proxy.targetPort=port;
+	proxy.on('connect',()=>{
+		CMD_REPLY();
+		console.log('[TCP]',`${socket.remoteAddress}:${socket.remotePort} ==> ${net.isIP(address)?'':'('+address+')'} ${proxy.remoteAddress}:${proxy.remotePort}`);
+		proxy.pipe(socket);
+		socket.pipe(proxy);
+	}).on('error',e=>{
+		CMD_REPLY(0x01);
+		server.emit('proxy_error',proxy,e);
+	});
+	 
+	socket.on('close',e=>{
+		let msg='';
+		if(socket.remoteAddress)
+			msg+=`${socket.remoteAddress}:${socket.remotePort} ==> `;
+		if(proxy.remoteAddress){
+			msg+=`${net.isIP(address)?'':'('+address+')'} ${proxy.remoteAddress}:${proxy.remotePort}`;
+		}else{
+			msg+=`${address}:${port}`;
+		}
+		console.log('  [proxy closed]',msg);
+	});
 }
 
 
-server.on('socket',(socket, port, address, protocol, proxy_ready)=>{
 
-	// Implement your own proxy here! Do encryption, tunnelling, whatever! Go flippin' mental!
-	// I plan to tunnel everything including SSH over an HTTP tunnel. For now, though, here is the plain proxy:
-	var proxy = net.createConnection({port:port, host:address,localAddress:commander.localAddress||undefined}, proxy_ready);
-	var localAddress,localPort;
-	proxy.on('connect',()=>{
-		info('%s:%d <== %s:%d ==> %s:%d',socket.remoteAddress,socket.remotePort,
-			proxy.localAddress,proxy.localPort,proxy.remoteAddress,proxy.remotePort);
-		localAddress=proxy.localAddress;
-		localPort=proxy.localPort;
-		proxy.pipe(socket);
-		socket.pipe(proxy);
-		proxy.on('error',e=>{
-			console.error('connection error:',e.message);
-			server.emit('connection_error',e.message);
-		});
-	}).on('error',e=>{
-		console.error('proxy error:',e.message);
-	});
-	 
-	socket.on('close', function(had_error) {
-		try{
-			if(localAddress && localPort)
-				console.log('The proxy %s:%d closed', localAddress, localPort);
-		else 
-			console.error('Connect to %s:%d failed', address, port);
-		}catch(err) {}
-	});
+
+
+server.on('tcp',TCPRelay)
+.on('udp',(socket, port, address, CMD_REPLY)=>{
+	console.log('[UDP]',`${socket.remoteAddress}:${socket.remotePort} ==> ${address}:${port}`);
+	new UDPRelay(socket, port, address, CMD_REPLY);
 }).on('error', function (e) {
 	console.error('SERVER ERROR: %j', e);
 	if(e.code == 'EADDRINUSE') {
@@ -66,9 +79,11 @@ server.on('socket',(socket, port, address, protocol, proxy_ready)=>{
 			server.listen(PORT, HOST);
 		}, 10000);
 	}
-}).on('socket_error',(socket,e)=>{
-	console.error('socket error:',e);
+}).on('client_error',(socket,e)=>{
+	console.error('  [client error]',`${net.isIP(socket.targetAddress)?'':'('+socket.targetAddress+')'} ${socket.remoteAddress}:${socket.targetPort}`,e.message);
 }).on('socks_error',(socket,e)=>{
-	console.error('socks error:',e);
+	console.error('  [socks error]',`${net.isIP(socket.targetAddress)?'':'('+socket.targetAddress+')'} ${socket.remoteAddress}:${socket.targetPort}`,e.message);
+}).on('proxy_error',(proxy,e)=>{
+	console.error('  [proxy error]',`${proxy.targetAddress}:${proxy.targetPort}`,e.message);
 }).listen(PORT, HOST);
 
