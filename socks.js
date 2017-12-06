@@ -156,10 +156,6 @@ class socksServer extends net.Server{
 				this._handshake(socket,chunk);
 			}).on('socks_error',e=>{
 				this.emit('socks_error',socket,e);
-			}).on('close',()=>{
-				setImmediate(()=>{
-					socket.removeAllListeners();
-				});
 			});
 		});
 	}
@@ -458,9 +454,6 @@ console.log('UDP: state',this)
 		}).on('error',e=>{
 			if(!CMD_REPLY(0x04))
 				socket.destroy('relay error');
-		}).on('close',()=>{
-			if(relay.closed)return;
-			relay.removeAllListeners();
 		});
 
 		socket.on('close',()=>{
