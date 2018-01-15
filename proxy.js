@@ -1,5 +1,6 @@
 
 var net = require('net'),
+	dgram = require('dgram'),
 	{
 		createServer,
 		Address,
@@ -12,14 +13,15 @@ commander
 	.usage('[options]')
 	.option('-u, --user [value]', 'set a user:pass format user')
 	.option('-H, --host [value]', 'host to listen,defaults to 127.0.0.1')
-	.option('-P, --port <n>', 'host to listen,defaults to 1080',/^\d+$/i)
-	.option('-L, --localAddress [value]', 'local assress to send the connection')
+	.option('-P, --port <n>', 'port to listen,defaults to 1080',/^\d+$/i)
+	.option('--localAddress [value]', 'local address to establish the connection')
+	.option('--localPort [value]', 'local port to establish the connection')
 	.parse(process.argv);
 
 // Create server
 // The server accepts SOCKS connections. This particular server acts as a proxy.
 var HOST=commander.host||'127.0.0.1',
-	PORT=commander.port||'8888',
+	PORT=commander.port||'1080',
 	server = createServer();
 
 console.log('server starting at ',HOST,':',PORT);
@@ -34,18 +36,23 @@ if(commander.user){
 tcp request relay
 directly connect the target and source
 */
-function TCPRelay(socket, port, address, CMD_REPLY){
-	let proxy = net.createConnection({port:port, host:address,localAddress:commander.localAddress||undefined}, CMD_REPLY);
+function relayTCP(socket, port, address, CMD_REPLY){
+	let proxy = net.createConnection({
+		port:port, 
+		host:address,
+		localAddress:commander.localAddress||undefined,
+		localPort:commander.localPort||undefined
+	},CMD_REPLY);
 	proxy.targetAddress=address;
 	proxy.targetPort=port;
 	proxy.on('connect',()=>{
-		CMD_REPLY();
+		CMD_REPLY(0x00,proxy.localAddress,proxy.localPort);
 		console.log('[TCP]',`${socket.remoteAddress}:${socket.remotePort} ==> ${net.isIP(address)?'':'('+address+')'} ${proxy.remoteAddress}:${proxy.remotePort}`);
 		proxy.pipe(socket);
 		socket.pipe(proxy);
 	}).on('error',e=>{
 		CMD_REPLY(0x01);
-		server.emit('proxy_error',proxy,e);
+		console.error('	[TCP proxy error]',`${proxy.targetAddress}:${proxy.targetPort}`,e.message);
 	});
 	 
 	socket.on('close',e=>{
@@ -57,19 +64,42 @@ function TCPRelay(socket, port, address, CMD_REPLY){
 		}else{
 			msg+=`${address}:${port}`;
 		}
-		console.log('  [proxy closed]',msg);
+		console.log('  [TCP closed]',msg);
 	});
 }
 
+/*
+udp request relay
+send udp msgs to each other
+*/
+function relayUDP(socket, port, address, CMD_REPLY){
+	console.log('[UDP]',`${socket.remoteAddress}`);
+	let relay=new UDPRelay(socket, port, address, CMD_REPLY);
+
+	relay.on('datagram',packet=>{//client to target forward
+		relay.relaySocket.send(packet.data,packet.port,packet.address,err=>{
+			if(err)server.emit('proxy_error',proxy,'UDP to remote error',err);
+		});
+	});
+	relay.relaySocket.on('message',(msg,info)=>{//target to client forward
+		if(!relay.usedClientAddress)return;//ignore if client address is unknown
+		if(info.address===relay.usedClientAddress && info.port===relay.usedClientPort)return;//ignore client message
+		relay.relaySocket.send(Buffer.concat([relay.headCache,msg]),relay.usedClientPort,relay.usedClientAddress,err=>{
+			if(err)console.error('	[UDP proxy error]',err.message);
+		});
+	}).once('close',()=>{
+		console.log('  [UDP closed]',socket.remoteAddress);
+	});
 
 
+}
 
 
-server.on('tcp',TCPRelay)
-.on('udp',(socket, port, address, CMD_REPLY)=>{
-	console.log('[UDP]',`${socket.remoteAddress}:${socket.remotePort} ==> ${address}:${port}`);
-	new UDPRelay(socket, port, address, CMD_REPLY);
-}).on('error', function (e) {
+//the socks server
+server
+.on('tcp',relayTCP)
+.on('udp',relayUDP)
+.on('error', function (e) {
 	console.error('SERVER ERROR: %j', e);
 	if(e.code == 'EADDRINUSE') {
 		console.log('Address in use, retrying in 10 seconds...');
@@ -82,8 +112,6 @@ server.on('tcp',TCPRelay)
 }).on('client_error',(socket,e)=>{
 	console.error('  [client error]',`${net.isIP(socket.targetAddress)?'':'('+socket.targetAddress+')'} ${socket.remoteAddress}:${socket.targetPort}`,e.message);
 }).on('socks_error',(socket,e)=>{
-	console.error('  [socks error]',`${net.isIP(socket.targetAddress)?'':'('+socket.targetAddress+')'} ${socket.remoteAddress}:${socket.targetPort}`,e.message);
-}).on('proxy_error',(proxy,e)=>{
-	console.error('  [proxy error]',`${proxy.targetAddress}:${proxy.targetPort}`,e.message);
+	console.error('  [socks error]',`${net.isIP(socket.targetAddress)?'':'('+(socket.targetAddress||"unknown")+')'} ${socket.remoteAddress||"unknown"}}:${socket.targetPort||"unknown"}`,e);
 }).listen(PORT, HOST);
 
