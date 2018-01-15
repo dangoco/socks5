@@ -31,7 +31,7 @@ var server=new socks5server.socksServer();
 
 server
 .on('tcp',(socket, port, address, CMD_REPLY)=>{
-    //do sth with the tcp proxy request
+	//do sth with the tcp proxy request
 }).on('udp',(socket, clientPort, clientAddress, CMD_REPLY)=>{
 	//do sth with the udp proxy request
 }).on('error', function (e) {
@@ -45,7 +45,6 @@ server
 /*
 CMD_REPLY(reply code,addr,port)
 see https://www.ietf.org/rfc/rfc1928.txt "6 Replies"@page5 for details
-
 */
 ```
 The `proxy.js` is a simple demo of the server.
@@ -78,7 +77,7 @@ The `proxy.js` is a simple demo of the server.
 * CMD
 	* connect			✅
 	* udp				✅ (maybe usable)
-		fragment		❌ (no plan on it)
+		* fragment		❌ (no plan on it)
 	* bind 				❌
 
 *I mainly modified the socks5 part and not sure if socks4 has been completely implemented.*
