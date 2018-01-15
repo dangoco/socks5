@@ -401,9 +401,6 @@ class UDPRelay extends events{
 		this.usedClientAddress;
 		this.usedClientPort;
 
-		//the socks5 udp head
-		this.headCache;
-
 
 		let ipFamily;
 		if(net.isIPv4(socket.localAddress)){ipFamily=4;}
@@ -436,7 +433,7 @@ class UDPRelay extends events{
 			if(!(headLength=UDPRelay.hasValidSocks5UDPHead(msg))){
 				return;
 			}
-			if(!this.headCache)this.headCache=msg.slice(0,headLength);
+			//if(!this.headCache)this.headCache=msg.slice(0,headLength);
 
 			let packet={
 				address:Address.read(msg,3),
@@ -472,41 +469,31 @@ class UDPRelay extends events{
 const _0000=Buffer.from([0,0,0,0]),
 	_00=Buffer.from([0,0]);
 function replyHead5(addr,port){
-	let ATYP=1,addrBuf,portBuf;
-	if(!addr)addrBuf=_0000;
-	else{
-		if(net.isIPv4(addr)){
-			addrBuf=Buffer.from((new ipAddress.Address4(addr)).toArray());				
-		}else if(net.isIPv6(addr)){
-			ATYP=0x04;
-			addrBuf=Buffer.from((new ipAddress.Address6(addr)).toUnsignedByteArray());				
-		}else{
-			ATYP=0x03;
-			addr=Buffer.from(addr);
-			if(addr.byteLength>255)
-				throw(new Error('too long domain name'));
-			addrBuf=Buffer.concat([Buffer.from([addr.byteLength]),addr]);
-		}
+	let resp=[0x05,0x00,0x00];
+	if(!addr || net.isIPv4(addr)){
+		resp.push(0x01,...(addr?(new ipAddress.Address4(addr)).toArray():_0000));		
+	}else if(net.isIPv6(addr)){
+		resp.push(0x04,...((new ipAddress.Address6(addr)).toUnsignedByteArray()));		
+	}else{
+		addr=Buffer.from(addr);
+		if(addr.byteLength>255)
+			throw(new Error('too long domain name'));
+		resp.push(0x03,addr.byteLength,...addr);		
 	}
-	if(!port)portBuf=_00;
+	if(!port)resp.push(0,0);//default:0
 	else{
-		portBuf=Buffer.allocUnsafe(2);
-		portBuf.writeUInt16BE(port);
+		resp.push(port>>>8,port&0xFF);
 	}
-	return Buffer.from([0x05,0x00,0x00,ATYP,...addrBuf,...portBuf]);
+	return Buffer.from(resp);
 }
 
 function CMD_REPLY5(REP,addr,port) {//'this' is the socket
 	if(this.CMD_REPLIED || !this.writable)return false;//prevent it from replying twice
 	// creating response
-	let resp;
 	if(REP){//something wrong
-		resp = Buffer.from([0x05,REP,0x00]);
-		this.end(resp);
+		this.end(Buffer.from([0x05,REP,0x00]));
 	}else{
-		resp=replyHead5(addr,port);
-		resp[0]=0x05;//version 5
-		this.write(resp);
+		this.write(replyHead5(addr,port));
 	}
 	this.CMD_REPLIED=true;
 	return true;
@@ -544,6 +531,7 @@ function createSocksServer() {
 module.exports = {
 	createServer: createSocksServer,
 	socksServer,
+	replyHead5,
 	UDPRelay,
 	Address,
 	Port,
