@@ -85,9 +85,7 @@ function relayUDP(socket, port, address, CMD_REPLY){
 	relay.relaySocket.on('message',(msg,info)=>{//target to client forward
 		if(!relay.usedClientAddress)return;//ignore if client address is unknown
 		if(info.address===relay.usedClientAddress && info.port===relay.usedClientPort)return;//ignore client message
-		let head=replyHead5(info.address,info.port);
-		head[0]=0x00;
-		relay.relaySocket.send(Buffer.concat([head,msg]),relay.usedClientPort,relay.usedClientAddress,err=>{
+		relay.replay(info.address,info.port,msg,err=>{
 			if(err)console.error('	[UDP proxy error]',err.message);
 		});
 	}).once('close',()=>{

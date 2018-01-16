@@ -450,6 +450,11 @@ class UDPRelay extends events{
 	}
 	get boundAddress(){return this.relaySocket&&this.relaySocket.address().address;}
 	get boundPort(){return this.relaySocket&&this.relaySocket.address().port;}
+	replay(address,port,msg,callback){
+		let head=replyHead5(address,port);
+		head[0]=0x00;
+		this.relaySocket.send(Buffer.concat([head,msg]),this.usedClientPort,this.usedClientAddress,callback);
+	}
 	close(){
 		this.socket.close();
 	}
