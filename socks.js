@@ -438,7 +438,7 @@ class UDPRelay extends events{
 					};
 					this.emit('datagram',packet);
 				}
-				if(this._events.rawClientMessage){
+				if(this._events.clientMessage){
 					this.emit('clientMessage',msg);
 				}
 			}
