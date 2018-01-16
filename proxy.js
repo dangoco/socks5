@@ -93,8 +93,6 @@ function relayUDP(socket, port, address, CMD_REPLY){
 	}).once('close',()=>{
 		console.log('  [UDP closed]',socket.remoteAddress);
 	});
-
-
 }
 
 
