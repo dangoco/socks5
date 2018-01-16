@@ -438,7 +438,7 @@ class UDPRelay extends events{
 					};
 					this.emit('datagram',packet);
 				}
-				if(this._events.rawClientMessage){
+				if(this._events.clientMessage){
 					this.emit('clientMessage',msg);
 				}
 			}
@@ -454,7 +454,10 @@ class UDPRelay extends events{
 	reply(address,port,msg,callback){
 		let head=replyHead5(address,port);
 		head[0]=0x00;
-		this.relaySocket.send(Buffer.concat([head,msg]),this.usedClientPort,this.usedClientAddress,callback);
+		this.replyMsg(Buffer.concat([head,msg]),callback);
+	}
+	replyMsg(msg,callback){
+		this.relaySocket.send(msg,this.usedClientPort,this.usedClientAddress,callback);
 	}
 	isFromClient(info){
 		if(!this.usedClientPort){//fix client's address and  port
