@@ -397,6 +397,9 @@ class UDPRelay extends events{
 		this.socket=socket;
 		this.relaySocket;
 
+		this.clientAddress=address;
+		this.clientPort=port;
+
 		//the client's address and port that determined at last
 		this.usedClientAddress;
 		this.usedClientPort;
@@ -420,27 +423,25 @@ class UDPRelay extends events{
 			/*
 				only handle datagrams from socket source and specified address
 			*/
-			if(!this.usedClientPort){//fix client's address and  port
-				if(info.address!==address && info.address!==socket.remoteAddress){//ignore
+			if(this._events.datagram || this._events.clientMessage){//has datagram listener 
+				if(!this.isFromClient(info))return;
+				let headLength;
+				if(!(headLength=UDPRelay.hasValidSocks5UDPHead(msg))){
 					return;
 				}
-				this.usedClientAddress=info.address;
-				this.usedClientPort=info.port;
-			}
-			if(this.usedClientAddress!==info.address || this.usedClientPort!==info.port)
-				return;
-			let headLength;
-			if(!(headLength=UDPRelay.hasValidSocks5UDPHead(msg))){
-				return;
-			}
-			//if(!this.headCache)this.headCache=msg.slice(0,headLength);
 
-			let packet={
-				address:Address.read(msg,3),
-				port:Port.read(msg,3),
-				data:msg.slice(headLength)
-			};
-			this.emit('datagram',packet);
+				if(this._events.datagram){
+					let packet={
+						address:Address.read(msg,3),
+						port:Port.read(msg,3),
+						data:msg.slice(headLength)
+					};
+					this.emit('datagram',packet);
+				}
+				if(this._events.rawClientMessage){
+					this.emit('clientMessage',msg);
+				}
+			}
 		}).on('error',e=>{
 			if(!CMD_REPLY(0x04))
 				socket.destroy('relay error');
@@ -450,10 +451,22 @@ class UDPRelay extends events{
 	}
 	get boundAddress(){return this.relaySocket&&this.relaySocket.address().address;}
 	get boundPort(){return this.relaySocket&&this.relaySocket.address().port;}
-	replay(address,port,msg,callback){
+	reply(address,port,msg,callback){
 		let head=replyHead5(address,port);
 		head[0]=0x00;
 		this.relaySocket.send(Buffer.concat([head,msg]),this.usedClientPort,this.usedClientAddress,callback);
+	}
+	isFromClient(info){
+		if(!this.usedClientPort){//fix client's address and  port
+			if(info.address!==this.clientAddress && info.address!==this.socket.remoteAddress){//ignore
+				return false;
+			}
+			this.usedClientAddress=info.address;
+			this.usedClientPort=info.port;
+			return true;
+		}
+		if(this.usedClientAddress!==info.address || this.usedClientPort!==info.port)return false;
+		return true;
 	}
 	close(){
 		this.socket.close();
