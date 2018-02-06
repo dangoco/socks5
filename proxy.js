@@ -1,3 +1,4 @@
+'use strict';
 
 var net = require('net'),
 	dgram = require('dgram'),
@@ -33,6 +34,7 @@ if(commander.user){
 	console.log('user ',commander.user);
 }
 
+
 /*
 tcp request relay
 directly connect the target and source
@@ -43,7 +45,7 @@ function relayTCP(socket, port, address, CMD_REPLY){
 		host:address,
 		localAddress:commander.localAddress||undefined,
 		localPort:commander.localPort||undefined
-	},CMD_REPLY);
+	});
 	proxy.targetAddress=address;
 	proxy.targetPort=port;
 	proxy.on('connect',()=>{
@@ -52,11 +54,23 @@ function relayTCP(socket, port, address, CMD_REPLY){
 		proxy.pipe(socket);
 		socket.pipe(proxy);
 	}).on('error',e=>{
-		CMD_REPLY(0x01);
+		let rep=0x01;
+		if(e.message.indexOf('ECONNREFUSED')>-1){
+			rep=0x05;
+		}else if(e.message.indexOf('EHOSTUNREACH')>-1){
+			rep=0x04;
+		}else if(e.message.indexOf('ENETUNREACH')>-1){
+			rep=0x03;
+		}else if(e.message.indexOf('ENETUNREACH')>-1){
+			rep=0x03;
+		}
+		CMD_REPLY(rep);
 		console.error('	[TCP proxy error]',`${proxy.targetAddress}:${proxy.targetPort}`,e.message);
 	});
-	 
+
 	socket.on('close',e=>{
+		proxy.destroy();
+		if(socket.connecting)proxy.destroy('Client closed');
 		let msg='';
 		if(socket.remoteAddress)
 			msg+=`${socket.remoteAddress}:${socket.remotePort} ==> `;

@@ -5,7 +5,7 @@ const net = require('net'),
 	DNS = require('dns'),
 	dgram = require('dgram'),
 	events=require('events'),
-	ipAddress=require('ip-address'),
+	IP=require('ip'),
 	SOCKS_VERSION5 = 5,
 	SOCKS_VERSION4 = 4,
 /*
@@ -366,7 +366,7 @@ class socksServer extends net.Server{
 			port = Port.read(chunk, 3);
 		} catch (e) {
 			socket.end();
-			socket.emit('socks_error',e);
+			socket.emit('socks_error',socket,e);
 			return;
 		}
 		socket.targetAddress=address;
@@ -492,9 +492,9 @@ const _0000=Buffer.from([0,0,0,0]),
 function replyHead5(addr,port){
 	let resp=[0x05,0x00,0x00];
 	if(!addr || net.isIPv4(addr)){
-		resp.push(0x01,...(addr?(new ipAddress.Address4(addr)).toArray():_0000));		
+		resp.push(0x01,...(addr?IP.toBuffer(addr):_0000));		
 	}else if(net.isIPv6(addr)){
-		resp.push(0x04,...((new ipAddress.Address6(addr)).toUnsignedByteArray()));		
+		resp.push(0x04,...(IP.toBuffer(addr)));		
 	}else{
 		addr=Buffer.from(addr);
 		if(addr.byteLength>255)
