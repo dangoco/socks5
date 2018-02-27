@@ -6,19 +6,21 @@ A simple SOCKS v5/v4/v4a server implementation and demo proxy.
 You can run it easily as:
 
 ```
-node proxy.js [options]
+socks5server [options]
 ```
 
 This will create a proxy defaults at `127.0.0.1:1080`.
 
-`options`:see `node proxy.js --help`
+`options`:see `socks5server --help`
 
 
 ### Install
 
 ```
-npm install socks5server
+npm i socks5server
 ```
+
+Add a `-g` if you want to install it globally or use `socks5server` command.
 
 ### Use the server in your project
 
