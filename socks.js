@@ -404,6 +404,7 @@ class UDPRelay extends events{
 		this.usedClientAddress;
 		this.usedClientPort;
 
+		this.reached=new Set();
 
 		let ipFamily;
 		if(net.isIPv4(socket.localAddress)){ipFamily=4;}
@@ -436,6 +437,7 @@ class UDPRelay extends events{
 						port:Port.read(msg,3),
 						data:msg.slice(headLength)
 					};
+					this.reached.add(`${packet.address}:${packet.port}`);
 					this.emit('datagram',packet);
 				}
 				if(this._events.clientMessage){

@@ -17,8 +17,6 @@ commander
 	.option('-u, --user [value]', 'set a user:pass format user')
 	.option('-H, --host [value]', 'host to listen,defaults to 127.0.0.1')
 	.option('-P, --port <n>', 'port to listen,defaults to 1080',/^\d+$/i)
-	.option('--localAddress [value]', 'local address to establish the connection')
-	.option('--localPort [value]', 'local port to establish the connection')
 	.parse(process.argv);
 
 // Create server
@@ -43,9 +41,7 @@ directly connect the target and source
 function relayTCP(socket, port, address, CMD_REPLY){
 	let proxy = net.createConnection({
 		port:port, 
-		host:address,
-		localAddress:commander.localAddress||undefined,
-		localPort:commander.localPort||undefined
+		host:address
 	});
 	proxy.targetAddress=address;
 	proxy.targetPort=port;
@@ -104,7 +100,11 @@ function relayUDP(socket, port, address, CMD_REPLY){
 			if(err)console.error('	[UDP proxy error]',err.message);
 		});
 	}).once('close',()=>{
-		console.log('  [UDP closed]',socket.remoteAddress);
+		let msg='';
+		if(relay.usedClientAddress)
+			msg+=`${relay.usedClientAddress}:${relay.usedClientPort} ==> `;
+		msg+=`(${[...relay.reached].join(' , ')||'no target reached'})`
+		console.log('  [UDP closed]',msg);
 	});
 }
 
