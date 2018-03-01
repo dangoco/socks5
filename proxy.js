@@ -127,5 +127,9 @@ server
 	console.error('  [client error]',`${net.isIP(socket.targetAddress)?'':'('+socket.targetAddress+')'} ${socket.remoteAddress}:${socket.targetPort}`,e.message);
 }).on('socks_error',(socket,e)=>{
 	console.error('  [socks error]',`${net.isIP(socket.targetAddress)?'':'('+(socket.targetAddress||"unknown")+')'} ${socket.remoteAddress||"unknown"}}:${socket.targetPort||"unknown"}`,e);
+}).once('listening',()=>{
+	process.on('uncaughtException',function(e){//prevent client from stoping when uncaughtException occurs
+		console.error(e);
+	});
 }).listen(PORT, HOST);
 
