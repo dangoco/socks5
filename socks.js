@@ -104,7 +104,7 @@ const	Address = {
 		} else if (buffer[offset] == ATYP.DNS) {
 			return buffer.toString('utf8', offset+2, offset+2+buffer[offset+1]);
 		} else if (buffer[offset] == ATYP.IP_V6) {
-			return buffer.slice(buffer[offset+1], buffer[offset+1+16]);
+			return ip.toString(buffer, offset+1, 16);
 		}
 	},
 	sizeOf: function(buffer, offset) {
